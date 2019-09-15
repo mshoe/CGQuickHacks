@@ -10,7 +10,11 @@ Michael Garland and Paul S. Heckbert. 1998. Simplifying surfaces with color and 
 I am using libigl to handle mesh loading, rendering, and other geometry stuff, but am not using any functions that implement a crucial part of the algorithm described in the paper. I am setting this restriction on myself for the sake of learning.
 
 __Reference Stanford Bunny__
-![pic](pics/referenceBunny.png)
+
+
+![pic](pics/referenceBunny.PNG)
 
 __Using Reduced Subset Placement Bunny__
+
+
 ![pic](pics/subsetPlacementBunny.png)
