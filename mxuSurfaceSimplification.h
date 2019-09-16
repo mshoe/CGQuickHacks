@@ -2,7 +2,9 @@
 #include <Eigen/Core>
 #include <vector>
 #include <memory>
+#include <unordered_set>
 #include <unordered_map>
+#include <queue>
 // From a list of triangle indices into some vertex set V, determine the
 // set of unique undirected edges.
 //
@@ -32,47 +34,68 @@ while (currentFaceCount > targetFaceCount) {
 
 */
 
+struct Quadric;
+struct Vertex;
+struct Face;
+struct Edge;
+struct VertexStructure;
+struct FaceStructure;
+struct EdgeStructure;
 
 
 struct Quadric {
-  Quadric() {
-    A = Eigen::Matrix3d::Zero();
-    b = Eigen::Vector3d::Zero();
-    c = 0.0;
-  }
-  Quadric(Eigen::Matrix3d _A, Eigen::Vector3d _b, double _c) : A(_A), b(_b), c(_c) {}
+	Quadric() {
+		A = Eigen::Matrix3d::Zero();
+		b = Eigen::Vector3d::Zero();
+		c = 0.0;
+	}
+	Quadric(Eigen::Matrix3d _A, Eigen::Vector3d _b, double _c) : A(_A), b(_b), c(_c) {}
 
-  double Evaluate(const Eigen::Vector3d& vec) {
-    return vec.dot(A * vec) + 2.0 * b.dot(vec) + c;
-  }
+	double Evaluate(const Eigen::Vector3d& vec) {
+		return vec.dot(A * vec) + 2.0 * b.dot(vec) + c;
+	}
 
-  Eigen::Matrix3d A;
-  Eigen::Vector3d b;
-  double c;
+	Eigen::Matrix3d A;
+	Eigen::Vector3d b;
+	double c;
 };
 
 struct Vertex {
-  Quadric Q;
 
-  // vertex position
-  Eigen::Vector3d V;
+	int index; // need to set its index to nullptr in Vertex structure
 
-  std::vector<int> f; // vertex can have multiple faces
-  std::vector<int> e; // vertex can have multiple edges
+	Quadric Q;
+
+	// vertex position
+	Eigen::Vector3d pos;
+
+	std::unordered_set<std::shared_ptr<Edge>> edgeSet;
+	std::unordered_set<std::shared_ptr<Face>> faceSet;
 };
 
 struct Face {
-  int v1, v2, v3;
+	int index; // need to set its index to nullptr in Face structure
+
+	std::shared_ptr<Vertex> v0 = nullptr, v1 = nullptr, v2 = nullptr;
+
+	// plane equation of face: dot(n, v) + d = 0
+	Eigen::Vector3d n; // normal n in plane equation
+	double d; // d in plane equation
+
 };
 
 struct Edge {
-  int v1, v2; // edge connects two vertices
+	std::shared_ptr<Vertex> v0 = nullptr, v1 = nullptr;
 
-  // when an edge is contracted:
-    // - v1 must replace v2 in every face/edge
-    // - v1 must get updated to the chosen position (subset or optimal placement)
+	Eigen::Vector3d optimal_placement; // will be subset placement if optimal can't be computed
+	double quadric_error;
 
-  double quadricError;
+	void ComputeErrorAndOptimalPlacement();
+
+	//std::unordered_set<std::shared_ptr<Edge>> edges_to_be_removed; // excluding this edge from set, since this edge needs to be removed last
+	//std::unordered_set<std::shared_ptr<Edge>> edges_to_be_updated;
+	//std::unordered_set<std::shared_ptr<Face>> faces_to_be_removed;
+	//std::unordered_set<std::shared_ptr<Face>> faces_to_be_updated;
 };
 
 void removeRow(Eigen::MatrixXi& matrix, unsigned int rowToRemove);
@@ -81,3 +104,7 @@ void removeRow(Eigen::MatrixXd& matrix, unsigned int rowToRemove);
 
 
 int IterativeEdgeContraction(Eigen::MatrixXd& V, Eigen::MatrixXi& F, int targetNumFaces);
+
+int MxuIterativeEdgeContraction(Eigen::MatrixXd& V, Eigen::MatrixXi& F, int targetNumFaces);
+
+bool operator<(std::shared_ptr<Edge> a, std::shared_ptr<Edge> b);
