@@ -5,6 +5,12 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <queue>
+#include <algorithm>
+#include <iterator>
+
+#define MXU_DEBUG_OUTPUT 1
+//#define MXU_FAST_SS_CHECKS 1
+
 // From a list of triangle indices into some vertex set V, determine the
 // set of unique undirected edges.
 //
@@ -29,7 +35,7 @@ For now, my goal is just to simplify the surface meshes, and ignore the color an
 while (currentFaceCount > targetFaceCount) {
   contractLowestCostEdge();
   RecomputeEdgeCosts();
-  currentFaceCount -= 2;
+  currentFaceCount -= 2;//
 }
 
 */
@@ -71,6 +77,9 @@ struct Vertex {
 
 	std::unordered_set<std::shared_ptr<Edge>> edgeSet;
 	std::unordered_set<std::shared_ptr<Face>> faceSet;
+
+	void PrintEdgeSet();
+
 };
 
 struct Face {
@@ -91,6 +100,11 @@ struct Edge {
 	double quadric_error;
 
 	void ComputeErrorAndOptimalPlacement();
+	bool edgeAlive = true;
+	bool quadricErrorChanged = false;
+
+	bool IsEquivalent(std::shared_ptr<Edge> otherEdge);
+	void Print();
 
 	//std::unordered_set<std::shared_ptr<Edge>> edges_to_be_removed; // excluding this edge from set, since this edge needs to be removed last
 	//std::unordered_set<std::shared_ptr<Edge>> edges_to_be_updated;

@@ -4,7 +4,7 @@
 #include <iostream>
 #include <igl/unique_edge_map.h>
 
-#define MXU_DEBUG_OUTPUT 1
+
 
 void PrintEdges(const Eigen::MatrixXi& E) {
 	for (int i = 0; i < E.rows(); i++) {
@@ -368,6 +368,37 @@ int MxuIterativeEdgeContraction(Eigen::MatrixXd& V, Eigen::MatrixXi& F, int targ
 			edges[i]->ComputeErrorAndOptimalPlacement();
 		}
 
+		// making sure it is working correctly or checking if the mesh is degenerate
+		//std::unordered_map<int, int> checkEdgeSet;
+		//int dups = 0;
+		//for (int i = 0; i < edges.size(); i++) {
+
+		//	if (checkEdgeSet.count(edges[i]->v0->index) && checkEdgeSet[edges[i]->v0->index] == edges[i]->v1->index ||
+		//		checkEdgeSet.count(edges[i]->v1->index) && checkEdgeSet[edges[i]->v1->index] == edges[i]->v0->index) {
+
+		//		dups++;
+		//		continue;
+		//	}
+		//	checkEdgeSet[E(i, 0)] = E(i, 1);
+		//	checkEdgeSet[E(i, 1)] = E(i, 0);
+		//}
+		//std::cout << "DUPS: " << dups << std::endl;
+
+		// Correctnesss check: see if no two vertices share more than one edge
+		/*for (int i = 0; i < vertices.size(); i++) {
+			for (int j = i+1; j < vertices.size(); j++) {
+				int sharedEdgeCounter = 0;
+				for (std::shared_ptr<Edge> viEdge : vertices[i]->edgeSet) {
+					if (vertices[j]->edgeSet.count(viEdge)) {
+						sharedEdgeCounter++;
+					}
+				}
+				if (sharedEdgeCounter > 1) {
+					std::cout << " should be impossible, edgeSet construction incorrect. " << std::endl;
+				}
+			}
+		}*/
+
 		// now put all edges in the edge queue
 		for (int i = 0; i < edges.size(); i++) {
 			edgeQueue.push(edges[i]);
@@ -392,9 +423,13 @@ int MxuIterativeEdgeContraction(Eigen::MatrixXd& V, Eigen::MatrixXi& F, int targ
 		
 		std::shared_ptr<Edge> minErrorEdge = edgeQueue.top();
 		edgeQueue.pop();
-		
-		// Assigning a value of -2.0 to duplicate edges
-		if (minErrorEdge->quadric_error < -1.0) {
+
+		if (!minErrorEdge->edgeAlive) {
+			continue;
+		}
+		if (minErrorEdge->quadricErrorChanged) {
+			minErrorEdge->quadricErrorChanged = false;
+			edgeQueue.push(minErrorEdge);
 			continue;
 		}
 
@@ -402,8 +437,24 @@ int MxuIterativeEdgeContraction(Eigen::MatrixXd& V, Eigen::MatrixXi& F, int targ
 		minv0 = minErrorEdge->v0;
 		minv1 = minErrorEdge->v1;
 
+#ifdef MXU_FAST_SS_CHECKS
+		// check if there was any error when moving the edgeSets
+		for (std::shared_ptr<Edge> v0edge : minv0->edgeSet) {
+			if (!v0edge->edgeAlive) {
+				std::cout << "error" << std::endl;
+			}
+		}
+		for (std::shared_ptr<Edge> v1edge : minv1->edgeSet) {
+			if (!v1edge->edgeAlive) {
+				std::cout << "error" << std::endl;
+			}
+		}
+#endif
+
 #ifdef MXU_DEBUG_OUTPUT
-		std::cout << std::endl << "Contracting edge: (" << minv0->index << ", " << minv1->index << ")" << std::endl;
+		std::cout << std::endl << "Number of faces: " << curNumFaces << std::endl;
+		std::cout << "Number of vertices: " << curNumVertices << std::endl;
+		std::cout << "Contracting edge: (" << minv0->index << ", " << minv1->index << ")" << std::endl;
 		std::cout << "Quadric error: " << minErrorEdge->quadric_error << std::endl;
 		std::cout << "Optimal placement: " << minErrorEdge->optimal_placement << std::endl;
 #endif
@@ -420,7 +471,7 @@ int MxuIterativeEdgeContraction(Eigen::MatrixXd& V, Eigen::MatrixXi& F, int targ
 		// 2.1: faces
 		// The only faces in v0's face set that have v1 are in v1's face set, so we can just iterate through v1's face set.
 		for (std::shared_ptr<Face> v1face : minv1->faceSet) {
-#ifdef MXU_DEBUG_OUTPUT
+#ifdef MXU_FAST_SS_CHECKS
 			if (v1face->v0 == v1face->v1 || v1face->v1 == v1face->v2 || v1face->v2 == v1face->v0) {
 				std::cout << "error, degenerate face was found before replacing v1 with v0" << std::endl;
 			}
@@ -448,47 +499,39 @@ int MxuIterativeEdgeContraction(Eigen::MatrixXd& V, Eigen::MatrixXi& F, int targ
 
 		// The only edge in v0's edge set that has v1 is this current edge, so we can skip iterating through v0's edge set.
 		// Iterate through v1's edge set and replace v1 with v0.
-#ifdef MXU_DEBUG_OUTPUT
+#ifdef MXU_FAST_SS_CHECKS
+		// check if minv0 and minv1 share any edge, which it shouldn't after removing minErrorEdge
 		for (std::shared_ptr<Edge> v0edge : minv0->edgeSet) {
 			if (minv1->edgeSet.count(v0edge)) {
 				std::cout << "error" << std::endl;
 			}
 		}
-		int badEdgeCounter = 0;
 		int changedEdgeCounter = 0;
 #endif
 		for (std::shared_ptr<Edge> searchEdge : minv1->edgeSet) {
 
-#ifdef MXU_DEBUG_OUTPUT
-			if (searchEdge->v0 == minv0 && searchEdge->v1 == minv1 ||
-				searchEdge->v1 == minv0 && searchEdge->v0 == minv1) {
+#ifdef MXU_FAST_SS_CHECKS
+			if (searchEdge->IsEquivalent(minErrorEdge)) {
 				std::cout << "how?" << std::endl;
 			}
 #endif
 
 			if (searchEdge->v0 == minv1) {
 				searchEdge->v0 = minv0;
-#ifdef MXU_DEBUG_OUTPUT
+#ifdef MXU_FAST_SS_CHECKS
 				changedEdgeCounter++;
 #endif
 			}
 			else if (searchEdge->v1 == minv1) {
 				searchEdge->v1 = minv0;
-#ifdef MXU_DEBUG_OUTPUT
+#ifdef MXU_FAST_SS_CHECKS
 				changedEdgeCounter++;
 #endif
 			}
-#ifdef MXU_DEBUG_OUTPUT
-			if (searchEdge->v0 == searchEdge->v1)
-				badEdgeCounter++;
-#endif
 		}
-#ifdef MXU_DEBUG_OUTPUT
+#ifdef MXU_FAST_SS_CHECKS
 		std::cout << "v1->edgeSet.size() == " << minv1->edgeSet.size() << std::endl;
 		std::cout << "changed counter == " << changedEdgeCounter << std::endl;
-		if (badEdgeCounter > 0) {
-			std::cout << "Found " << badEdgeCounter << " bad edges in v1->edgeSet." << std::endl;
-		}
 #endif
 
 		// 3. delete v1 and any degenerate faces/edges and any duplicate edges
@@ -497,31 +540,67 @@ int MxuIterativeEdgeContraction(Eigen::MatrixXd& V, Eigen::MatrixXi& F, int targ
 		// before deleting v1, move all of v1's edges to v0, except for duplicates.
 		// in fact, mark duplicates to be skipped in the priority queue
 		int duplicateEdgeCounter = 0;
+		std::vector<std::shared_ptr<Edge>> dupEdges;
 		for (std::shared_ptr<Edge> v1Edge : minv1->edgeSet) {
 			
 			bool duplicate = false;
+			// Check if an edge equivalent to v1edge is already in v0's edge set
 			for (std::shared_ptr<Edge> v0Edge : minv0->edgeSet) {
 
-				bool duplicateCase1 = (v0Edge->v0 == v1Edge->v0 && v0Edge->v1 == v1Edge->v1);
-				bool duplicateCase2 = (v0Edge->v1 == v1Edge->v0 && v0Edge->v0 == v1Edge->v1);
-
-				if (duplicateCase1 || duplicateCase2) {
+				if (v0Edge->IsEquivalent(v1Edge)) {
 					duplicate = true;
-					duplicateEdgeCounter++;
+					
 					break;
 				}
 			}
 
 			if (!duplicate) {
+				// if not a duplicate, move v1Edge to v0's edge set
 				minv0->edgeSet.insert(v1Edge);
 			}
 			else {
-				v1Edge->quadric_error = -2.0;
+				// else mark v1Edge as dead
+				v1Edge->edgeAlive = false;
+
+				// and remove it from all of its vertices' edge sets
+				dupEdges.push_back(v1Edge);
+				duplicateEdgeCounter++;
 			}
 		}
+
+		for (std::shared_ptr<Edge> dupEdge : dupEdges) {
+			dupEdge->v0->edgeSet.erase(dupEdge);
+			dupEdge->v1->edgeSet.erase(dupEdge);
+		}
+
+		/*dupEdge1->v0->edgeSet.erase(dupEdge1);
+		dupEdge1->v1->edgeSet.erase(dupEdge1);
+		dupEdge2->v0->edgeSet.erase(dupEdge2);
+		dupEdge2->v1->edgeSet.erase(dupEdge2);*/
+
 		
-#ifdef MXU_DEBUG_OUTPUT
+#ifdef MXU_FAST_SS_CHECKS
 		std::cout << "Found " << duplicateEdgeCounter << " duplicate edges from from v1's edgeSet in v0's edgeSet." << std::endl;
+		/*if (duplicateEdgeCounter != 2) {
+			std::cout << "Didn't find two duplicate edges, error." << std::endl;
+			minv0->PrintEdgeSet();
+			minv1->PrintEdgeSet();
+		}*/
+
+		// correctness check: v0EdgeSet should not contain duplicates or this current edge
+		for (std::shared_ptr<Edge> v0edge : minv0->edgeSet) {
+			int dups = minv0->edgeSet.count(v0edge);
+			if (dups != 1) {
+				std::cout << "duplicates of v0edge ptr found." << std::endl;
+			}
+			for (std::shared_ptr<Edge> v0edge2 : minv0->edgeSet) {
+				if (v0edge2 == v0edge)
+					continue;
+				if (v0edge->IsEquivalent(v0edge2)) {
+					std::cout << "equivalent edge found." << std::endl;
+				}
+			}
+		}
 #endif
 
 		// 3.2.1: move faces from v1's face set to v0's face set.
@@ -535,23 +614,25 @@ int MxuIterativeEdgeContraction(Eigen::MatrixXd& V, Eigen::MatrixXi& F, int targ
 
 		// 3.2.2: remove degenerate faces from v0's face set (should be 2)
 		int degenFaces = 0;
-		for (int i = 0; i < 3; i++) {
-			for (std::shared_ptr<Face> v0face : minv0->faceSet) {
-				if (v0face->v0 == v0face->v1 || v0face->v1 == v0face->v2 || v0face->v2 == v0face->v0) {
-					// if the face is degenerate, remove all copies of its shared_ptr
-					v0face->v0->faceSet.erase(v0face);
-					v0face->v1->faceSet.erase(v0face);
-					v0face->v2->faceSet.erase(v0face);
-					faces[v0face->index] = nullptr;
-					v0face = nullptr;
-					degenFaces++;
-					break;
-				}
+		std::vector<std::shared_ptr<Face>> degenFaceVec;
+		for (std::shared_ptr<Face> v0face : minv0->faceSet) {
+			if (v0face->v0 == v0face->v1 || v0face->v1 == v0face->v2 || v0face->v2 == v0face->v0) {
+				// if the face is degenerate, remove all copies of its shared_ptr
+				degenFaceVec.push_back(v0face);
+				degenFaces++;
 			}
 		}
-		if (degenFaces == 3) {
-			std::cout << "is that possible?" << std::endl;
+		for (std::shared_ptr<Face> degenFace : degenFaceVec) {
+			degenFace->v0->faceSet.erase(degenFace);
+			degenFace->v1->faceSet.erase(degenFace);
+			degenFace->v2->faceSet.erase(degenFace);
+			faces[degenFace->index] = nullptr;
+			//degenFace = nullptr;
 		}
+
+		/*if (degenFaces == 3) {
+			std::cout << "is that possible?" << std::endl;
+		}*/
 
 #ifdef MXU_DEBUG_OUTPUT
 		std::cout << "Removed " << degenFaces << " degenerate faces." << std::endl;
@@ -612,8 +693,10 @@ int MxuIterativeEdgeContraction(Eigen::MatrixXd& V, Eigen::MatrixXi& F, int targ
 		// 3.6: recompute error and optimal placement on affected edges
 		for (std::shared_ptr<Edge> v0edge : minv0->edgeSet) {
 			v0edge->ComputeErrorAndOptimalPlacement();
+			v0edge->quadricErrorChanged = true;
 		}
 
+		// 3.6 CORRECT
 #ifdef MXU_DEBUG_OUTPUT
 		std::cout << minv0->faceSet.size() << " Planes, ? quadrics, " << minv0->edgeSet.size() << " errors and optimal placements recomputed." << std::endl;
 #endif
@@ -703,3 +786,22 @@ void Edge::ComputeErrorAndOptimalPlacement()
 	}
 }
 
+bool Edge::IsEquivalent(std::shared_ptr<Edge> otherEdge)
+{
+	bool duplicateCase1 = (v0 == otherEdge->v0 && v1 == otherEdge->v1);
+	bool duplicateCase2 = (v0 == otherEdge->v1 && v1 == otherEdge->v0);
+	return duplicateCase1 || duplicateCase2;
+}
+
+void Edge::Print()
+{
+	std::cout << "(" << v0->index << ", " << v1->index << ")" << std::endl;
+}
+
+void Vertex::PrintEdgeSet()
+{
+	std::cout << "Printing edge set for v: " << index << std::endl;
+	for (std::shared_ptr<Edge> edge : edgeSet) {
+		edge->Print();
+	}
+}

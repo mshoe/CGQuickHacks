@@ -11,11 +11,18 @@ namespace GLOBAL_VARS {
 	Eigen::MatrixXd V;
 	Eigen::MatrixXi F;
 
-	int targetNumFaces = 1000;
+	int targetNumFaces = 6000;
 }
 
 Eigen::MatrixXd V2;
 Eigen::MatrixXi F2;
+
+void ResetToMesh(std::string offPath, igl::opengl::glfw::Viewer& viewer) {
+	igl::readOFF(offPath, GLOBAL_VARS::V, GLOBAL_VARS::F);
+
+	viewer.data().clear();
+	viewer.data().set_mesh(GLOBAL_VARS::V, GLOBAL_VARS::F);
+}
 
 int main(int argc, char* argv[])
 {
@@ -47,18 +54,25 @@ int main(int argc, char* argv[])
 		// Add new group
 		if (ImGui::CollapsingHeader("Surface Simplification", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			ImGui::Text(std::string(std::string("number of faces: ") + std::to_string(numFaces)).c_str());
-			ImGui::Text(std::string(std::string("number of vertices: ") + std::to_string(numVertices)).c_str());
+			ImGui::Text(std::string(std::string("number of faces: ") + std::to_string(GLOBAL_VARS::F.rows())).c_str());
+			ImGui::Text(std::string(std::string("number of vertices: ") + std::to_string(GLOBAL_VARS::V.rows())).c_str());
 			ImGui::InputInt("targetNumFaces", &GLOBAL_VARS::targetNumFaces);
-			if (ImGui::Button("Reset Mesh")) {
-				igl::readOFF("../data/bunny.off", GLOBAL_VARS::V, GLOBAL_VARS::F);
-				numVertices = GLOBAL_VARS::V.rows();
-				numFaces = GLOBAL_VARS::F.rows();
-
-				viewer.data().clear();
-				viewer.data().set_mesh(GLOBAL_VARS::V, GLOBAL_VARS::F);
+			if (ImGui::Button("Reset Mesh to Original")) {
+				ResetToMesh("../data/bunny.off", viewer);
 			}
-			if (ImGui::Button("Iterative Edge Contraction")) {
+			if (ImGui::Button("Reset Mesh to Reduced 1")) {
+				ResetToMesh("../data/bunnySubsetPlacementReduced.off", viewer);
+			}
+			if (ImGui::Button("Reset Mesh to Reduced 2")) {
+				ResetToMesh("../data/bunnySubsetPlacementReduced2.off", viewer);
+			}
+			if (ImGui::Button("Reset Mesh to Reduced 3")) {
+				ResetToMesh("../data/bunnySubsetPlacementReduced3.off", viewer);
+			}
+			if (ImGui::Button("Reset Mesh to Reduced 4")) {
+				ResetToMesh("../data/bunnySubsetPlacementReduced4.off", viewer);
+			}
+			if (ImGui::Button("Slow Iterative Edge Contraction")) {
 				IterativeEdgeContraction(GLOBAL_VARS::V, GLOBAL_VARS::F, GLOBAL_VARS::targetNumFaces);
 				numVertices = GLOBAL_VARS::V.rows();
 				numFaces = GLOBAL_VARS::F.rows();
@@ -66,7 +80,7 @@ int main(int argc, char* argv[])
 				viewer.data().clear();
 				viewer.data().set_mesh(GLOBAL_VARS::V, GLOBAL_VARS::F);
 			}
-			if (ImGui::Button("mxu Iterative Edge Contraction")) {
+			if (ImGui::Button("Fast Iterative Edge Contraction")) {
 				MxuIterativeEdgeContraction(GLOBAL_VARS::V, GLOBAL_VARS::F, GLOBAL_VARS::targetNumFaces);
 				numVertices = GLOBAL_VARS::V.rows();
 				numFaces = GLOBAL_VARS::F.rows();
